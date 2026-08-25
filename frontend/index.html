@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Heat Decision Agent</title>
+<style>
+  :root {
+    --safe: #2e7d32;
+    --caution: #ed6c02;
+    --unsafe: #c62828;
+    --unknown: #616161;
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2e38;
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .app { width: 100%; max-width: 780px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .input-row { display: flex; gap: 8px; margin-bottom: 24px; }
+  input[type="text"] {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 14px;
+  }
+  button {
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: none;
+    background: #4c8dff;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .decision-card {
+    border-radius: 10px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    margin-bottom: 16px;
+  }
+  .decision-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+  .decision-badge.Safe { background: var(--safe); }
+  .decision-badge.Caution { background: var(--caution); }
+  .decision-badge.Unsafe { background: var(--unsafe); }
+  .decision-badge.Unknown { background: var(--unknown); }
+  .reasoning { line-height: 1.5; font-size: 14px; }
+  .section-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 20px 0 8px;
+  }
+  .trace-step {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    background: #12141a;
+  }
+  .trace-step .tool-name { font-weight: 700; color: #4c8dff; }
+  .trace-step pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .error-tag {
+    color: var(--unsafe);
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .loading { color: var(--muted); font-size: 14px; }
+  .examples { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .examples span {
+    text-decoration: underline;
+    cursor: pointer;
+    margin-right: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🌡️ Heat Decision Agent</h1>
+  <div class="subtitle">Ask a heat-safety question. The agent decides which FortyGuard tools to call and shows its reasoning.</div>
+
+  <div class="examples">
+    Try: <span onclick="fillExample(this)">Is it hot right now in Anna Nagar?</span>
+    <span onclick="fillExample(this)">Is it safe to hold an outdoor event in Anna Nagar tomorrow afternoon?</span>
+  </div>
+
+  <div class="input-row">
+    <input id="question" type="text" placeholder="e.g. Is it safe to hold an outdoor event in Anna Nagar tomorrow afternoon?" />
+    <button id="askBtn" onclick="ask()">Ask</button>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+const API_URL = "http://localhost:8000/ask";
+
+function fillExample(el) {
+  document.getElementById('question').value = el.textContent;
+}
+
+async function ask() {
+  const q = document.getElementById('question').value.trim();
+  const resultEl = document.getElementById('result');
+  const btn = document.getElementById('askBtn');
+  if (!q) return;
+
+  btn.disabled = true;
+  resultEl.innerHTML = '<div class="loading">Agent is thinking and calling tools…</div>';
+
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q })
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      resultEl.innerHTML = `<div class="loading">Request failed (${resp.status}): ${escapeHtml(errText)}</div>`;
+      return;
+    }
+    const data = await resp.json();
+    render(data);
+  } catch (e) {
+    resultEl.innerHTML = `<div class="loading">Network error: ${escapeHtml(String(e))}. Is the API running on localhost:8000?</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function render(data) {
+  const resultEl = document.getElementById('result');
+  const decision = data.decision || 'Unknown';
+
+  let html = `
+    <div class="decision-card">
+      <div class="decision-badge ${decision}">${decision}</div>
+      <div class="reasoning">${escapeHtml(data.reasoning || '')}</div>
+    </div>
+  `;
+
+  if (data.trace && data.trace.length) {
+    html += `<div class="section-title">Agent tool-call trace (${data.trace.length} step${data.trace.length > 1 ? 's' : ''})</div>`;
+    for (const t of data.trace) {
+      html += `
+        <div class="trace-step">
+          <span class="tool-name">${escapeHtml(t.tool_name)}</span>
+          ${t.error ? '<span class="error-tag">ERROR</span>' : ''}
+          <pre>input:  ${escapeHtml(JSON.stringify(t.tool_input))}
+output: ${escapeHtml(JSON.stringify(t.tool_output))}</pre>
+        </div>
+      `;
+    }
+  }
+
+  if (data.data_used && Object.keys(data.data_used).length) {
+    html += `<div class="section-title">Data used in final decision</div>`;
+    html += `<div class="trace-step"><pre>${escapeHtml(JSON.stringify(data.data_used, null, 2))}</pre></div>`;
+  }
+
+  resultEl.innerHTML = html;
+}
+
+document.getElementById('question').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') ask();
+});
+</script>
+</body>
+</html>
