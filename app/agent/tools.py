@@ -118,6 +118,29 @@ TOOLS: list[dict[str, Any]] = [
             },
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "predict_risk",
+            "description": (
+                "Use the trained ML risk classifier to predict risk category "
+                "(Safe/Caution/Unsafe) for a location given heat index, "
+                "exceedance hours, hour of day, and forecast trend. Call this "
+                "after get_current_heat/get_exceedance to get a confidence-scored "
+                "ML prediction with explainable top factors."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "heat_index_c": {"type": "number", "description": "Heat index in Celsius"},
+                    "exceedance_hours": {"type": "number", "description": "Hours exceeding safe threshold"},
+                    "hour_of_day": {"type": "integer", "description": "Current hour (0-23)"},
+                    "forecast_trend_rising": {"type": "integer", "description": "1 if rising trend, 0 otherwise"},
+                },
+                "required": ["heat_index_c", "exceedance_hours", "hour_of_day"],
+            },
+        }
+    },
 ]
 
 
@@ -181,6 +204,15 @@ async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, 
             start_lon=tool_input["start_lon"],
             end_lat=tool_input["end_lat"],
             end_lon=tool_input["end_lon"],
+        )
+
+    if tool_name == "predict_risk":
+        from app.agent.risk_predictor import predict_risk
+        return predict_risk(
+            heat_index_c=tool_input["heat_index_c"],
+            exceedance_hours=tool_input["exceedance_hours"],
+            hour_of_day=tool_input["hour_of_day"],
+            forecast_trend_rising=tool_input.get("forecast_trend_rising", 0),
         )
 
     raise ValueError(f"Unknown tool: {tool_name}")
