@@ -1,9 +1,0 @@
-location,location_type,timestamp,current_temp,exceedance_duration,exceedance_magnitude,forecast_trend
-Dubai Marina,open_street,2026-08-26T16:17:24.190850Z,34.5,1.5,3.2,rising
-"Umm Al Emarat Park, AD",park,2026-08-26T16:17:29.251386Z,34.5,1.5,3.2,rising
-Phoenix Downtown Transit,bus_stop,2026-08-26T16:17:34.313955Z,34.5,1.5,3.2,rising
-Miami South Beach,residential,2026-08-26T16:17:39.371639Z,34.5,1.5,3.2,rising
-Riyadh King Fahd Rd,open_street,2026-08-26T16:17:44.447477Z,34.5,1.5,3.2,rising
-Sydney Centennial Park,park,2026-08-26T16:17:49.527987Z,34.5,1.5,3.2,rising
-New Delhi Connaught Place,open_street,2026-08-26T16:17:54.611698Z,34.5,1.5,3.2,rising
-Las Vegas Strip,open_street,2026-08-26T16:17:59.736405Z,34.5,1.5,3.2,rising
