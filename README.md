@@ -145,6 +145,15 @@ python scripts/test_agent.py
 Open `frontend/index.html` directly in a browser (it calls
 `http://localhost:8000/ask`), or serve it with any static file server.
 
+## Route Comparison
+
+The `compare_route` tool allows the agent to find the coolest or safest path between two coordinates.
+It operates independently of the ML pipeline:
+1. Calls the public OSRM API to fetch candidate driving routes.
+2. Samples points evenly along each candidate route.
+3. Calls the FortyGuard API (`get_current_heat`) to score heat exposure at each sampled point.
+4. Aggregates the temperature metrics and ranks the routes, allowing the agent to recommend the optimal path.
+
 ## FortyGuard API integration status
 
 `app/fortyguard_client.py` is written against **placeholder** endpoint
@@ -168,9 +177,8 @@ don't need to change.
 
 - [x] Phase 1 — Core decision agent, `/ask` endpoint, tool-calling loop,
       structured decision + trace, 4 sample test questions.
-- [ ] Phase 2 — `compare_route` tool (OSRM sampling + per-point heat scoring).
-      Scaffolded as a stub tool in `agent/tools.py` (`compare_route`) that
-      currently raises `NotImplementedError` with a clear TODO.
+- [x] Phase 2 — `compare_route` tool (OSRM sampling + per-point heat scoring).
+      Implemented and wired into the agent's tool loop.
 - [ ] Phase 3 — Background scheduler + alert firing. See
       `app/alerts_scheduler.py` stub.
 - [ ] Phase 4 — ML risk classifier (`predict_risk` tool). See
