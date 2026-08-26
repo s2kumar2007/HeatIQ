@@ -26,6 +26,7 @@ Decide which ones are needed — do not call every tool by default.
   - "What is the risk / what does the ML model say?" -> call get_current_heat + get_exceedance first,
     then predict_risk with those values to get an ML-backed confidence score and top risk factors.
   - "Which route is cooler?" -> compare_route.
+  - To get an ML-based objective risk prediction, use predict_risk. When surfacing this, include the `top_factors` driving the model's confidence in your natural-language answer (e.g. "Unsafe (81% confidence) — mainly driven by surface temp delta and humidity").
 
 If a location is a place name, estimate lat/lon from your knowledge and note it.
 

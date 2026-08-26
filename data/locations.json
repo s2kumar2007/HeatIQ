@@ -1,0 +1,68 @@
+[
+    {
+        "name": "Dubai Marina",
+        "lat": 25.0805,
+        "lon": 55.1403,
+        "type": "open_street"
+    },
+    {
+        "name": "Umm Al Emarat Park, AD",
+        "lat": 24.4552,
+        "lon": 54.3813,
+        "type": "park"
+    },
+    {
+        "name": "Phoenix Downtown Transit",
+        "lat": 33.4484,
+        "lon": -112.0740,
+        "type": "bus_stop"
+    },
+    {
+        "name": "Miami South Beach",
+        "lat": 25.7906,
+        "lon": -80.1300,
+        "type": "residential"
+    },
+    {
+        "name": "Riyadh King Fahd Rd",
+        "lat": 24.7136,
+        "lon": 46.6753,
+        "type": "open_street"
+    },
+    {
+        "name": "Sydney Centennial Park",
+        "lat": -33.8966,
+        "lon": 151.2335,
+        "type": "park"
+    },
+    {
+        "name": "New Delhi Connaught Place",
+        "lat": 28.6304,
+        "lon": 77.2177,
+        "type": "open_street"
+    },
+    {
+        "name": "Las Vegas Strip",
+        "lat": 36.1147,
+        "lon": -115.1728,
+        "type": "open_street"
+    },
+    {
+        "name": "Austin Zilker Park",
+        "lat": 30.2670,
+        "lon": -97.7712,
+        "type": "park"
+    },
+    {
+        "name": "Madrid Central Bus Station",
+        "lat": 40.3951,
+        "lon": -3.6763,
+        "type": "bus_stop"
+    },
+    {
+        "name": "Bangkok Sukhumvit",
+        "lat": 13.7381,
+        "lon": 100.5658,
+        "type": "residential"
+    }
+]

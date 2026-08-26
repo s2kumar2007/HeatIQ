@@ -4,3 +4,17 @@ __pycache__/
 */__pycache__/
 .env
 *.py[cod]
+
+# Generated data — re-created from real API calls, never commit
+data/historical_data.csv
+data/training_data.csv
+data/exposure_anchors.json
+data/exposure_training_data.csv
+
+# Trained model artifact — re-created by train_exposure_model.py
+exposure_model.pkl
+
+# Debug scratch files
+debug.txt
+
+.env
