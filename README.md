@@ -145,6 +145,11 @@ python scripts/test_agent.py
 Open `frontend/index.html` directly in a browser (it calls
 `http://localhost:8000/ask`), or serve it with any static file server.
 
+## Data Collection
+
+All training data is collected live from the FortyGuard API via scheduled polling — no synthetic or simulated values. 
+- **Collection duration**: Currently polling every 30 minutes in the background.
+- **Total row count**: Pending (waiting for valid API credentials in `.env` to accumulate clean rows).
 ## Route Comparison
 
 The `compare_route` tool allows the agent to find the coolest or safest path between two coordinates.
