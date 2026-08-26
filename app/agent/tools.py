@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.fortyguard_client import FortyGuardAPIError, fortyguard_client
+from predict_safe_duration import predict_safe_duration
 
 # ----------------------------------------------------------------------
 # Tool schemas — passed to the Claude API `tools` parameter
@@ -118,6 +119,43 @@ TOOLS: list[dict[str, Any]] = [
             },
         }
     },
+    {
+        "name": "predict_safe_duration",
+        "description": (
+            "Predict how many minutes of continuous outdoor exposure are safe "
+            "at a location given current temperature and humidity conditions. "
+            "Returns safe_minutes and a confidence range. Use this when someone "
+            "asks how long they can safely stay outside, or how long outdoor "
+            "activities/operations can safely continue."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "current_temp": {
+                    "type": "number",
+                    "description": "Current air temperature in Celsius.",
+                },
+                "humidity": {
+                    "type": "number",
+                    "description": "Relative humidity as a percentage (0-100). Defaults to 50 if unknown.",
+                },
+                "exceedance_duration": {
+                    "type": "number",
+                    "description": "Hours the location has already been above the heat threshold (0 if unknown).",
+                },
+                "hour_of_day": {
+                    "type": "integer",
+                    "description": "Current hour of the day in 24h format (0-23).",
+                },
+                "location_type": {
+                    "type": "string",
+                    "enum": ["open_street", "park", "bus_stop", "residential"],
+                    "description": "Type of outdoor location.",
+                },
+            },
+            "required": ["current_temp"],
+        },
+    },
 ]
 
 
@@ -181,6 +219,15 @@ async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, 
             start_lon=tool_input["start_lon"],
             end_lat=tool_input["end_lat"],
             end_lon=tool_input["end_lon"],
+        )
+
+    if tool_name == "predict_safe_duration":
+        return predict_safe_duration(
+            current_temp=tool_input["current_temp"],
+            humidity=tool_input.get("humidity", 50.0),
+            exceedance_duration=tool_input.get("exceedance_duration", 0.0),
+            hour_of_day=tool_input.get("hour_of_day", 12),
+            location_type=tool_input.get("location_type", "open_street"),
         )
 
     raise ValueError(f"Unknown tool: {tool_name}")
