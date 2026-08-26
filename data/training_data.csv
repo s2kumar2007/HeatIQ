@@ -1,0 +1,5 @@
+location,location_type,timestamp,current_temp,exceedance_duration,exceedance_magnitude,hour_of_day,forecast_trend
+Dubai Marina,open_street,2026-08-26 16:17:24.190850+00:00,34.5,1.5,3.2,16,rising
+"Umm Al Emarat Park, AD",park,2026-08-26 16:17:29.251386+00:00,34.5,1.5,3.2,16,rising
+Phoenix Downtown Transit,bus_stop,2026-08-26 16:17:34.313955+00:00,34.5,1.5,3.2,16,rising
+Miami South Beach,residential,2026-08-26 16:17:39.371639+00:00,34.5,1.5,3.2,16,rising
