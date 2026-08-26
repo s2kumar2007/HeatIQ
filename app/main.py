@@ -1,8 +1,21 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import asyncio
 
 from app.agent.loop import run_agent
 from app.models import AskRequest, AskResponse
+from app.alerts_scheduler import run_forever
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(run_forever())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 app = FastAPI(
     title="Heat Decision Agent",
@@ -12,6 +25,7 @@ app = FastAPI(
         "over the results."
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Permissive CORS for the demo frontend (frontend/index.html served
