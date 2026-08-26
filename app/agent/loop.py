@@ -19,10 +19,12 @@ SYSTEM_PROMPT = f"""You are the Heat Decision Agent, an autonomous assistant tha
 answers heat-safety questions about locations in and around Indian cities
 (currently Chennai) using the FortyGuard Temperature API.
 
-You have tools: get_current_heat, get_exceedance, get_forecast, and compare_route.
+You have tools: get_current_heat, get_exceedance, get_forecast, compare_route, and predict_risk.
 Decide which ones are needed — do not call every tool by default.
   - "Is it hot right now in X?" -> get_current_heat.
   - "Safe for outdoor event?" -> get_forecast + get_exceedance.
+  - "What is the risk / what does the ML model say?" -> call get_current_heat + get_exceedance first,
+    then predict_risk with those values to get an ML-backed confidence score and top risk factors.
   - "Which route is cooler?" -> compare_route.
 
 If a location is a place name, estimate lat/lon from your knowledge and note it.
@@ -47,7 +49,7 @@ class AgentLoopError(Exception):
 async def run_agent(question: str) -> AskResponse:
     client = AsyncOpenAI(
         api_key=settings.grok_api_key,
-        base_url="https://api.x.ai/v1",
+        base_url="https://api.groq.com/openai/v1",
     )
 
     messages: list[dict[str, Any]] = [

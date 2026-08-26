@@ -1,21 +1,15 @@
 """
-PHASE 3 STUB — Background alert automation. Not wired into app/main.py
-yet; run separately or import + call `start_scheduler()` from main.py
-once ready.
-
-Intent: periodically call get_exceedance/get_current_heat for a small
-list of tracked locations (app/tracked_locations.json). If a location
-crosses the Unsafe threshold, generate an alert message using the same
-reasoning approach as the core agent and fire it (console log / webhook
-POST / email — keep it simple, this is about demonstrating autonomous
-monitoring + decision, not real alert infra).
+Background alert scheduler — monitors tracked_locations.json and exposes
+in-memory state for GET /alerts/status.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -25,51 +19,66 @@ from app.fortyguard_client import fortyguard_client
 
 logger = logging.getLogger("heat_agent.alerts")
 
-CHECK_INTERVAL_SECONDS = 15 * 60  # every 15 minutes; tune as needed
+CHECK_INTERVAL_SECONDS = 15 * 60  # every 15 minutes
+
+# ---------------------------------------------------------------------------
+# In-memory state (read by /alerts/status)
+# ---------------------------------------------------------------------------
+_state: dict[str, Any] = {
+    "last_check": None,          # ISO timestamp str
+    "tracked_count": 0,
+    "unsafe_locations": [],      # list of label strings
+}
 
 
-def _load_tracked_locations() -> list[dict]:
+def get_status() -> dict[str, Any]:
+    return dict(_state)
+
+
+def _load_tracked() -> list[dict]:
     path = Path(settings.alert_tracked_locations_file)
     if not path.exists():
-        logger.warning("No tracked locations file at %s — skipping alert check", path)
         return []
     return json.loads(path.read_text())
 
 
-async def _check_all_locations():
-    locations = _load_tracked_locations()
+async def _check_all():
+    locations = _load_tracked()
+    _state["tracked_count"] = len(locations)
+    unsafe = []
     for loc in locations:
         try:
-            snapshot = await fortyguard_client.get_current_heat(loc["lat"], loc["lon"])
-            heat_index = snapshot.get("heat_index_c", snapshot.get("temperature_c"))
-            band = classify_point(heat_index)
+            snap = await fortyguard_client.get_current_heat(loc["lat"], loc["lon"])
+            hi = snap.get("heat_index_c", snap.get("temperature_c", 0))
+            band = classify_point(hi)
             if band == "Unsafe":
-                await _fire_alert(loc, snapshot, band)
-        except Exception:  # noqa: BLE001
-            logger.exception("Failed checking location %s", loc)
+                label = loc.get("label", f"{loc['lat']},{loc['lon']}")
+                unsafe.append(label)
+                await _fire_alert(loc, snap, band)
+        except Exception:
+            logger.exception("Failed checking %s", loc)
+    _state["unsafe_locations"] = unsafe
+    _state["last_check"] = datetime.now(timezone.utc).isoformat()
 
 
 async def _fire_alert(location: dict, snapshot: dict, band: str):
-    message = (
-        f"[HEAT ALERT] {location.get('label', location)} is currently "
-        f"classified '{band}' — heat index {snapshot.get('heat_index_c')}C. "
-        f"Snapshot: {snapshot}"
+    msg = (
+        f"[HEAT ALERT] {location.get('label', location)} is '{band}' — "
+        f"heat index {snapshot.get('heat_index_c')}°C"
     )
-    logger.warning(message)
-    print(message)  # simple console "firing" for the demo
-
+    logger.warning(msg)
+    print(msg)
     if settings.alert_webhook_url:
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
-                await client.post(settings.alert_webhook_url, json={"message": message, "location": location})
-            except Exception:  # noqa: BLE001
-                logger.exception("Failed to POST alert webhook")
+                await client.post(settings.alert_webhook_url, json={"message": msg, "location": location})
+            except Exception:
+                logger.exception("Webhook failed")
 
 
 async def run_forever():
-    """Simple loop; swap for APScheduler's AsyncIOScheduler if preferred."""
     while True:
-        await _check_all_locations()
+        await _check_all()
         await asyncio.sleep(CHECK_INTERVAL_SECONDS)
 
 
