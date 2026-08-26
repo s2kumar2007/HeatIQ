@@ -1,0 +1,90 @@
+[
+  {
+    "location": "Dubai Marina",
+    "location_type": "open_street",
+    "lat": 25.0805,
+    "lon": 55.1403,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "Umm Al Emarat Park, AD",
+    "location_type": "park",
+    "lat": 24.4552,
+    "lon": 54.3813,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "Phoenix Downtown Transit",
+    "location_type": "bus_stop",
+    "lat": 33.4484,
+    "lon": -112.074,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "Miami South Beach",
+    "location_type": "residential",
+    "lat": 25.7906,
+    "lon": -80.13,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "Riyadh King Fahd Rd",
+    "location_type": "open_street",
+    "lat": 24.7136,
+    "lon": 46.6753,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "Sydney Centennial Park",
+    "location_type": "park",
+    "lat": -33.8966,
+    "lon": 151.2335,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "New Delhi Connaught Place",
+    "location_type": "open_street",
+    "lat": 28.6304,
+    "lon": 77.2177,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "Las Vegas Strip",
+    "location_type": "open_street",
+    "lat": 36.1147,
+    "lon": -115.1728,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "Austin Zilker Park",
+    "location_type": "park",
+    "lat": 30.267,
+    "lon": -97.7712,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "Madrid Central Bus Station",
+    "location_type": "bus_stop",
+    "lat": 40.3951,
+    "lon": -3.6763,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  },
+  {
+    "location": "Bangkok Sukhumvit",
+    "location_type": "residential",
+    "lat": 13.7381,
+    "lon": 100.5658,
+    "current_temp_c": 34.5,
+    "heat_index_c": 38.0
+  }
+]

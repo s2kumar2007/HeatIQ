@@ -55,19 +55,17 @@ async def fetch_data_for_location(loc: dict):
         forecast = await fortyguard_client.get_forecast(lat, lon, start_time_str, end_time_str)
         result["forecast_trend"] = forecast.get("trend", "stable")
         
-    except (FortyGuardAPIError, Exception) as e:
-        import tenacity
-        if isinstance(e, tenacity.RetryError) or isinstance(e, Exception):
-            logger.warning(f"Using placeholder data for {loc_name} due to API Error.")
-            snapshot = fortyguard_client._placeholder_snapshot(lat, lon)
-            result["current_temp"] = snapshot.get("temperature_c")
-            
-            exceed = fortyguard_client._placeholder_exceedance(lat, lon, start_time_str, end_time_str, 35.0)
-            result["exceedance_duration"] = exceed.get("exceedance_duration_hours", 0)
-            result["exceedance_magnitude"] = exceed.get("max_exceedance_c", 0)
-            
-            fc = fortyguard_client._placeholder_forecast(lat, lon, start_time_str, end_time_str)
-            result["forecast_trend"] = fc.get("trend", "stable")
+    except Exception as e:
+        logger.warning(f"Using placeholder data for {loc_name} due to error: {type(e).__name__}")
+        snapshot = fortyguard_client._placeholder_snapshot(lat, lon)
+        result["current_temp"] = snapshot.get("temperature_c")
+        
+        exceed = fortyguard_client._placeholder_exceedance(lat, lon, start_time_str, end_time_str, 35.0)
+        result["exceedance_duration"] = exceed.get("exceedance_duration_hours", 0)
+        result["exceedance_magnitude"] = exceed.get("max_exceedance_c", 0)
+        
+        fc = fortyguard_client._placeholder_forecast(lat, lon, start_time_str, end_time_str)
+        result["forecast_trend"] = fc.get("trend", "stable")
         
     return result
 
