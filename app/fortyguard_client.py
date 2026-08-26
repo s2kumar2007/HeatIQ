@@ -60,7 +60,7 @@ class FortyGuardClient:
     # Low-level helpers
     # ------------------------------------------------------------------
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             resp = await self._client.post(path, json=payload)
@@ -76,7 +76,7 @@ class FortyGuardClient:
         except httpx.RequestError as e:
             raise FortyGuardAPIError(f"FortyGuard API request failed on {path}: {e}") from e
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8), reraise=True)
     async def _get(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         try:
             resp = await self._client.get(path, params=params)
