@@ -1,84 +1,86 @@
 """
 build_training_set.py
 
-Generates the training dataset by combining anchor data with baseline WBGT guidelines,
-and introducing controlled variations (e.g., hour_of_day, exceedance_duration, location_type).
+Builds a training CSV from real API anchor data plus publicly-documented
+OSHA/NIOSH heat-stress guidelines.
+
+Design:
+  - Temperature and heat-index values come from the real API (via exposure_anchors.json).
+  - Safe-duration labels are derived from the established guideline table.
+  - Variation is introduced only through the real range of locations and times:
+    hour_of_day is sampled across the day, exceedance_duration from 0-4 h.
+    No synthetic noise is added to the temperature — it stays as fetched.
+
+One guideline lookup per row; no extra API calls.
 """
-import json
-import random
 import csv
+import json
 from pathlib import Path
+
 from heat_exposure_guidelines import get_baseline_safe_duration
 
-def generate_row(anchor, hour_of_day, exceedance_hours):
-    # Anchor conditions
-    base_temp = anchor["current_temp_c"]
-    base_hi = anchor["heat_index_c"]
-    
-    # Introduce deterministic but varied noise based on time of day
-    # Hottest at 14:00 (2pm)
-    temp_variation = -abs(14 - hour_of_day) * 0.5 + 4.0 
-    
-    # Introduce noise based on location type
-    loc_type_multiplier = {
-        "open_street": 1.5,
-        "park": -1.0,
-        "bus_stop": 0.5,
-        "residential": 0.0
-    }.get(anchor["location_type"], 0.0)
-    
-    # Simulated effective heat index at this time
-    eff_hi = base_hi + temp_variation + loc_type_multiplier
-    
-    # Exceedance fatigue overhead: for every continuous hour in exceedance, safe time drops 10%
-    baseline_duration = get_baseline_safe_duration(eff_hi)
-    
-    penalty_factor = max(0.4, 1.0 - (exceedance_hours * 0.1))
-    
-    # Add minor noise
-    final_duration = int(baseline_duration * penalty_factor * random.uniform(0.95, 1.05))
-    final_duration = max(5, final_duration)  # At least 5 mins
-    
-    return {
-        "location": anchor["location"],
-        "location_type": anchor["location_type"],
-        "temp_c": round(base_temp + temp_variation + loc_type_multiplier, 1),
-        "heat_index_c": round(eff_hi, 1),
-        "hour_of_day": hour_of_day,
-        "exceedance_duration": exceedance_hours,
-        "safe_duration_minutes": final_duration
-    }
+# Location-type penalty (°C added to effective heat-index for exposure calculation)
+# Based on general environmental physics: exposed surfaces absorb more radiant heat.
+LOCATION_TYPE_HI_OFFSET = {
+    "open_street":  2.0,   # road surface radiates heat
+    "park":        -1.5,   # shade / grass cooling
+    "bus_stop":     1.0,   # shelter with limited airflow
+    "residential":  0.0,   # neutral reference
+}
 
-def main():
+
+def baseline_for_row(heat_index_c: float, location_type: str, exceedance_hours: int) -> int:
+    offset = LOCATION_TYPE_HI_OFFSET.get(location_type, 0.0)
+    eff_hi = heat_index_c + offset
+
+    # Each hour already spent in exceedance reduces safe duration by 10 % (fatigue / dehydration)
+    baseline = get_baseline_safe_duration(eff_hi)
+    penalty  = max(0.4, 1.0 - exceedance_hours * 0.10)
+    return max(5, int(baseline * penalty))
+
+
+def main() -> None:
     anchors_file = Path("data/exposure_anchors.json")
-    out_file = Path("data/exposure_training_data.csv")
-    
+    out_file     = Path("data/exposure_training_data.csv")
+
     if not anchors_file.exists():
-        print("Run fetch_exposure_anchors.py first.")
+        print("ERROR: data/exposure_anchors.json not found. Run fetch_exposure_anchors.py first.")
         return
-        
-    with open(anchors_file, "r") as f:
+
+    with open(anchors_file) as f:
         anchors = json.load(f)
-        
+
+    if not anchors:
+        print("ERROR: No anchors found. Make sure fetch_exposure_anchors.py collected real data.")
+        return
+
     dataset = []
-    
-    # Generate 100 variations per anchor
-    random.seed(42)
+    # Iterate over real anchor readings × a fixed grid (no random noise)
     for anchor in anchors:
-        for _ in range(100):
-            hr = random.randint(6, 20)  # Active hours
-            exc = random.randint(0, 4)
-            dataset.append(generate_row(anchor, hr, exc))
-            
+        for hour in range(6, 21):       # 06:00 – 20:00
+            for exc in range(0, 5):     # 0 – 4 hours exceedance
+                dataset.append({
+                    "location":             anchor["location"],
+                    "location_type":        anchor["location_type"],
+                    "temp_c":               anchor["current_temp_c"],
+                    "heat_index_c":         anchor["heat_index_c"],
+                    "hour_of_day":          hour,
+                    "exceedance_duration":  exc,
+                    "safe_duration_minutes": baseline_for_row(
+                        anchor["heat_index_c"], anchor["location_type"], exc
+                    ),
+                })
+
     with open(out_file, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
-            "location", "location_type", "temp_c", "heat_index_c", 
-            "hour_of_day", "exceedance_duration", "safe_duration_minutes"
+            "location", "location_type", "temp_c", "heat_index_c",
+            "hour_of_day", "exceedance_duration", "safe_duration_minutes",
         ])
         writer.writeheader()
         writer.writerows(dataset)
-        
-    print(f"Dataset securely generated with {len(dataset)} rows to {out_file}")
+
+    print(f"Training set written: {len(dataset)} rows from {len(anchors)} real anchor(s) → {out_file}")
+
 
 if __name__ == "__main__":
     main()
