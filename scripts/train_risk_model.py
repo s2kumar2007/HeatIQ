@@ -22,11 +22,17 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
+import shap
+import matplotlib.pyplot as plt
+from sklearn.calibration import calibration_curve
+from sklearn.metrics import brier_score_loss
+
 from app.agent.thresholds import classify_point
 from app.agent.tools import _KNOWN_LOCATIONS  # small set of demo locations
 from app.fortyguard_client import fortyguard_client
 
-MODEL_OUT_PATH = "app/agent/risk_model.joblib"
+import os
+MODEL_OUT_PATH = "models/risk_model.joblib"
 
 
 async def collect_training_rows() -> pd.DataFrame:
@@ -81,8 +87,35 @@ def train(df: pd.DataFrame):
     acc = clf.score(X_test, y_test) if len(X_test) else float("nan")
     print(f"Holdout accuracy: {acc:.3f} (n_test={len(X_test)})")
 
-    joblib.dump({"model": clf, "feature_cols": feature_cols}, MODEL_OUT_PATH)
-    print(f"Saved model to {MODEL_OUT_PATH}")
+    # SHAP explainer
+    explainer = shap.TreeExplainer(clf)
+
+    # Calibration for 'Unsafe' class (assuming it's a binary/multi classification)
+    try:
+        y_prob = clf.predict_proba(X_test)
+        unsafe_idx = list(clf.classes_).index("Unsafe")
+        y_test_bin = (y_test == "Unsafe").astype(int)
+        
+        prob_true, prob_pred = calibration_curve(y_test_bin, y_prob[:, unsafe_idx], n_bins=5)
+        brier = brier_score_loss(y_test_bin, y_prob[:, unsafe_idx])
+        print(f"Calibration Brier Score (Unsafe vs Rest): {brier:.4f}")
+
+        plt.figure(figsize=(6, 6))
+        plt.plot(prob_pred, prob_true, marker='o', label='RandomForest')
+        plt.plot([0, 1], [0, 1], linestyle='--', label='Perfectly calibrated')
+        plt.xlabel('Predicted probability (Unsafe)')
+        plt.ylabel('True probability in each bin (Unsafe)')
+        plt.legend()
+        plt.title('Calibration Curve')
+        plt.tight_layout()
+        plt.savefig("models/calibration_curve.png")
+        print("Saved calibration curve to models/calibration_curve.png")
+    except ValueError:
+        print("Skipping calibration curve (needs 'Unsafe' class in holdout).")
+
+    os.makedirs(os.path.dirname(MODEL_OUT_PATH), exist_ok=True)
+    joblib.dump({"model": clf, "feature_cols": feature_cols, "explainer": explainer}, MODEL_OUT_PATH)
+    print(f"Saved model and SHAP explainer to {MODEL_OUT_PATH}")
 
 
 async def main():

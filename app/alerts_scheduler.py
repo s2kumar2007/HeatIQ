@@ -1,7 +1,5 @@
 """
-PHASE 3 STUB — Background alert automation. Not wired into app/main.py
-yet; run separately or import + call `start_scheduler()` from main.py
-once ready.
+Background alert automation. Wired into app/main.py lifespan events.
 
 Intent: periodically call get_exceedance/get_current_heat for a small
 list of tracked locations (app/tracked_locations.json). If a location
