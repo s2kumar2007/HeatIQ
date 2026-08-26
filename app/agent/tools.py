@@ -156,6 +156,27 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["current_temp"],
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "predict_risk",
+            "description": (
+                "Predict the overall heat safety risk category (Safe, Caution, Unsafe) "
+                "based on empirical conditions, using a machine learning model. "
+                "Use this to get an objective risk classification."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "hour_of_day": {"type": "integer"},
+                    "heat_index_c": {"type": "number"},
+                    "exceedance_hours": {"type": "number"},
+                    "forecast_trend_rising": {"type": "integer", "description": "1 if rising, 0 otherwise"},
+                },
+                "required": ["hour_of_day", "heat_index_c", "exceedance_hours", "forecast_trend_rising"],
+            },
+        }
+    },
 ]
 
 
@@ -191,26 +212,35 @@ async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, 
     the whole request.
     """
     if tool_name == "get_current_heat":
-        return await fortyguard_client.get_current_heat(
-            lat=tool_input["lat"], lon=tool_input["lon"]
-        )
+        try:
+            return await fortyguard_client.get_current_heat(
+                lat=tool_input["lat"], lon=tool_input["lon"]
+            )
+        except FortyGuardAPIError as e:
+            return {"error": "Data unavailable", "details": str(e)}
 
     if tool_name == "get_exceedance":
-        return await fortyguard_client.get_exceedance(
-            lat=tool_input["lat"],
-            lon=tool_input["lon"],
-            start_time=tool_input["start_time"],
-            end_time=tool_input["end_time"],
-            threshold_c=tool_input.get("threshold_c", 35.0),
-        )
+        try:
+            return await fortyguard_client.get_exceedance(
+                lat=tool_input["lat"],
+                lon=tool_input["lon"],
+                start_time=tool_input["start_time"],
+                end_time=tool_input["end_time"],
+                threshold_c=tool_input.get("threshold_c", 35.0),
+            )
+        except FortyGuardAPIError as e:
+            return {"error": "Data unavailable", "details": str(e)}
 
     if tool_name == "get_forecast":
-        return await fortyguard_client.get_forecast(
-            lat=tool_input["lat"],
-            lon=tool_input["lon"],
-            start_time=tool_input["start_time"],
-            end_time=tool_input["end_time"],
-        )
+        try:
+            return await fortyguard_client.get_forecast(
+                lat=tool_input["lat"],
+                lon=tool_input["lon"],
+                start_time=tool_input["start_time"],
+                end_time=tool_input["end_time"],
+            )
+        except FortyGuardAPIError as e:
+            return {"error": "Data unavailable", "details": str(e)}
 
     if tool_name == "compare_route":
         from app.route_scorer import score_routes
@@ -229,5 +259,51 @@ async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, 
             hour_of_day=tool_input.get("hour_of_day", 12),
             location_type=tool_input.get("location_type", "open_street"),
         )
+
+    if tool_name == "predict_risk":
+        import joblib
+        from pathlib import Path
+        import pandas as pd
+        model_path = Path("models/risk_model.joblib")
+        if not model_path.exists():
+            return {"error": "Risk model not trained yet. Run train_risk_model.py first."}
+        
+        bundle = joblib.load(model_path)
+        clf = bundle["model"]
+        feature_cols = bundle["feature_cols"]
+        explainer = bundle.get("explainer")
+        
+        row = {col: tool_input.get(col, 0) for col in feature_cols}
+        df = pd.DataFrame([row])
+        
+        pred = clf.predict(df)[0]
+        probas = clf.predict_proba(df)[0]
+        confidence = max(probas)
+        
+        # Calculate SHAP values
+        top_factors = []
+        if explainer:
+            shap_values = explainer.shap_values(df)
+            if isinstance(shap_values, list):
+                class_idx = list(clf.classes_).index(pred)
+                shap_vals = shap_values[class_idx][0]
+            else:
+                shap_vals = shap_values[0]
+            
+            factors = [{"feature": col, "contribution": float(val)} for col, val in zip(feature_cols, shap_vals)]
+            factors.sort(key=lambda x: abs(x["contribution"]), reverse=True)
+            top_factors = factors[:3]
+
+        from app.agent.thresholds import SAFE_MAX_C
+        hi = tool_input.get("heat_index_c", 0)
+        diff = hi - SAFE_MAX_C
+        compare_str = f"{diff:.1f}°C above safe exposure threshold" if diff > 0 else f"{abs(diff):.1f}°C below safe exposure threshold"
+        
+        return {
+            "risk_category": str(pred), 
+            "confidence": float(confidence),
+            "top_factors": top_factors,
+            "compares_to_threshold": compare_str
+        }
 
     raise ValueError(f"Unknown tool: {tool_name}")
