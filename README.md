@@ -22,16 +22,15 @@ An LLM-driven agent (Claude, via tool-calling) that:
 
 1. Receives a free-text question.
 2. Decides which of its tools to call — `get_current_heat`,
-   `get_exceedance`, `get_forecast` (and, in later phases,
-   `compare_route` / `predict_risk`) — and with what parameters.
+   `get_exceedance`, `get_forecast`, `compare_route`, `predict_safe_duration`, 
+   and `predict_risk` — and with what parameters.
 3. Feeds tool results back to itself and reasons against documented
    heat-safety thresholds.
 4. Returns `{decision, reasoning, data_used}` plus a full trace of every
    tool call made, so the trace itself is visible evidence of genuine
    agentic behavior rather than a scripted pipeline.
 
-This repo currently ships **Phase 1** end-to-end (core decision agent) with
-stubs and TODOs for Phases 2–5 documented below.
+This repo currently ships **Phases 1 through 4** end-to-end (core decision agent, routing, background alerts, ML risk classifier) with Phase 5 remaining as a UI stretch goal.
 
 ## Architecture (text diagram)
 
@@ -140,6 +139,10 @@ curl -X POST http://localhost:8000/ask \
 python scripts/test_agent.py
 ```
 
+### Background Monitoring
+
+**Alert monitoring runs automatically on server startup.** It periodically checks the heat conditions for locations listed in `app/tracked_locations.json` in the background and issues console and/or webhook alerts when conditions become unsafe.
+
 ### Frontend
 
 Open `frontend/index.html` directly in a browser (it calls
@@ -159,24 +162,16 @@ It operates independently of the ML pipeline:
 3. Calls the FortyGuard API (`get_current_heat`) to score heat exposure at each sampled point.
 4. Aggregates the temperature metrics and ranks the routes, allowing the agent to recommend the optimal path.
 
-## FortyGuard API integration status
+## How the Risk Model Works (Phase 4)
 
-`app/fortyguard_client.py` is written against **placeholder** endpoint
-shapes (`/v1/snapshot`, `/v1/exceedance`, `/v1/forecast`, all POST with a
-submit → poll pattern for exceedance/forecast). **Before demoing, confirm
-against the real FortyGuard docs/dashboard:**
+Instead of a black-box prediction, the agent utilizes an **Explainable RandomForestClassifier** (`predict_risk`).
+- **SHAP Integration**: A TreeExplainer objectively quantifies how much each underlying FortyGuard feature (e.g., heat index, exceedance duration) drove the model's confidence.
+- **Model Calibration**: Output confidence scores are verified with Brier score and a calibration curve (`models/calibration_curve.png`).
+- **Tool Output**: The exact SHAP results (Top 3) and direct temperature threshold comparisons are surfaced for the agent. The agent then dynamically reasons over this structured data to explain its logic out loud to the user (e.g. *Unsafe (81% confidence) — mainly driven by the exceedance duration*).
 
-- Exact base URL and auth header/scheme (currently assumes
-  `Authorization: Bearer <FORTYGUARD_API_KEY>`).
-- Exact endpoint paths and whether snapshot is synchronous while
-  exceedance/forecast are async (submit job → poll job id → result).
-- Exact request/response field names (currently assumed:
-  `lat`, `lon`, `start_time`, `end_time`, `threshold_c`).
-- Rate limits, so `fortyguard_client.py`'s retry/backoff can be tuned.
+## FortyGuard API Integration Status
 
-Everything is isolated in that one file plus `config.py`, so once you have
-the real docs it's a contained edit — the agent loop and FastAPI layer
-don't need to change.
+The `app/fortyguard_client.py` client stricly uses live API endpoints (e.g. `/v1/env_params` and `/v1/status/{activity_id}` polling) with the required `api-key` header. **It no longer uses placeholder data on failure.** If the API fails or is unavailable, the client raises a clear `FortyGuardAPIError` that correctly surfaces to the agent as "Data unavailable".
 
 ## What's implemented vs. stretch
 
@@ -184,10 +179,8 @@ don't need to change.
       structured decision + trace, 4 sample test questions.
 - [x] Phase 2 — `compare_route` tool (OSRM sampling + per-point heat scoring).
       Implemented and wired into the agent's tool loop.
-- [ ] Phase 3 — Background scheduler + alert firing. See
-      `app/alerts_scheduler.py` stub.
-- [ ] Phase 4 — ML risk classifier (`predict_risk` tool). See
-      `scripts/train_risk_model.py` stub.
+- [x] Phase 3 — Background scheduler + alert firing. Automatically monitors `app/tracked_locations.json` and fires alerts on unsafe conditions.
+- [x] Phase 4 — ML risk classifier (`predict_risk` tool). Trained from FortyGuard features to predict heat risk mathematically.
 - [ ] Phase 5 — Polished frontend/map, demo video. `frontend/index.html`
       is a minimal working starting point, not the polished version.
 
