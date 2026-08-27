@@ -23,6 +23,8 @@ You have tools: get_current_heat, get_exceedance, get_forecast, compare_route, a
 Decide which ones are needed — do not call every tool by default.
   - "Is it hot right now in X?" -> get_current_heat.
   - "Safe for outdoor event?" -> get_forecast + get_exceedance.
+  - "What is the risk / what does the ML model say?" -> call get_current_heat + get_exceedance first,
+    then predict_risk with those values to get an ML-backed confidence score and top risk factors.
   - "Which route is cooler?" -> compare_route.
   - To get an ML-based objective risk prediction, use predict_risk. When surfacing this, include the `top_factors` driving the model's confidence in your natural-language answer (e.g. "Unsafe (81% confidence) — mainly driven by surface temp delta and humidity").
 
@@ -48,7 +50,7 @@ class AgentLoopError(Exception):
 async def run_agent(question: str) -> AskResponse:
     client = AsyncOpenAI(
         api_key=settings.grok_api_key,
-        base_url="https://api.x.ai/v1",
+        base_url="https://api.groq.com/openai/v1",
     )
 
     messages: list[dict[str, Any]] = [

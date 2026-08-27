@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 from app.fortyguard_client import FortyGuardAPIError, fortyguard_client
-from predict_safe_duration import predict_safe_duration
 
 # ----------------------------------------------------------------------
 # Tool schemas — passed to the Claude API `tools` parameter
@@ -120,60 +119,25 @@ TOOLS: list[dict[str, Any]] = [
         }
     },
     {
-        "name": "predict_safe_duration",
-        "description": (
-            "Predict how many minutes of continuous outdoor exposure are safe "
-            "at a location given current temperature and humidity conditions. "
-            "Returns safe_minutes and a confidence range. Use this when someone "
-            "asks how long they can safely stay outside, or how long outdoor "
-            "activities/operations can safely continue."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "current_temp": {
-                    "type": "number",
-                    "description": "Current air temperature in Celsius.",
-                },
-                "humidity": {
-                    "type": "number",
-                    "description": "Relative humidity as a percentage (0-100). Defaults to 50 if unknown.",
-                },
-                "exceedance_duration": {
-                    "type": "number",
-                    "description": "Hours the location has already been above the heat threshold (0 if unknown).",
-                },
-                "hour_of_day": {
-                    "type": "integer",
-                    "description": "Current hour of the day in 24h format (0-23).",
-                },
-                "location_type": {
-                    "type": "string",
-                    "enum": ["open_street", "park", "bus_stop", "residential"],
-                    "description": "Type of outdoor location.",
-                },
-            },
-            "required": ["current_temp"],
-        },
-    },
-    {
         "type": "function",
         "function": {
             "name": "predict_risk",
             "description": (
-                "Predict the overall heat safety risk category (Safe, Caution, Unsafe) "
-                "based on empirical conditions, using a machine learning model. "
-                "Use this to get an objective risk classification."
+                "Use the trained ML risk classifier to predict risk category "
+                "(Safe/Caution/Unsafe) for a location given heat index, "
+                "exceedance hours, hour of day, and forecast trend. Call this "
+                "after get_current_heat/get_exceedance to get a confidence-scored "
+                "ML prediction with explainable top factors."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "hour_of_day": {"type": "integer"},
-                    "heat_index_c": {"type": "number"},
-                    "exceedance_hours": {"type": "number"},
-                    "forecast_trend_rising": {"type": "integer", "description": "1 if rising, 0 otherwise"},
+                    "heat_index_c": {"type": "number", "description": "Heat index in Celsius"},
+                    "exceedance_hours": {"type": "number", "description": "Hours exceeding safe threshold"},
+                    "hour_of_day": {"type": "integer", "description": "Current hour (0-23)"},
+                    "forecast_trend_rising": {"type": "integer", "description": "1 if rising trend, 0 otherwise"},
                 },
-                "required": ["hour_of_day", "heat_index_c", "exceedance_hours", "forecast_trend_rising"],
+                "required": ["heat_index_c", "exceedance_hours", "hour_of_day"],
             },
         }
     },
@@ -212,35 +176,26 @@ async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, 
     the whole request.
     """
     if tool_name == "get_current_heat":
-        try:
-            return await fortyguard_client.get_current_heat(
-                lat=tool_input["lat"], lon=tool_input["lon"]
-            )
-        except FortyGuardAPIError as e:
-            return {"error": "Data unavailable", "details": str(e)}
+        return await fortyguard_client.get_current_heat(
+            lat=tool_input["lat"], lon=tool_input["lon"]
+        )
 
     if tool_name == "get_exceedance":
-        try:
-            return await fortyguard_client.get_exceedance(
-                lat=tool_input["lat"],
-                lon=tool_input["lon"],
-                start_time=tool_input["start_time"],
-                end_time=tool_input["end_time"],
-                threshold_c=tool_input.get("threshold_c", 35.0),
-            )
-        except FortyGuardAPIError as e:
-            return {"error": "Data unavailable", "details": str(e)}
+        return await fortyguard_client.get_exceedance(
+            lat=tool_input["lat"],
+            lon=tool_input["lon"],
+            start_time=tool_input["start_time"],
+            end_time=tool_input["end_time"],
+            threshold_c=tool_input.get("threshold_c", 35.0),
+        )
 
     if tool_name == "get_forecast":
-        try:
-            return await fortyguard_client.get_forecast(
-                lat=tool_input["lat"],
-                lon=tool_input["lon"],
-                start_time=tool_input["start_time"],
-                end_time=tool_input["end_time"],
-            )
-        except FortyGuardAPIError as e:
-            return {"error": "Data unavailable", "details": str(e)}
+        return await fortyguard_client.get_forecast(
+            lat=tool_input["lat"],
+            lon=tool_input["lon"],
+            start_time=tool_input["start_time"],
+            end_time=tool_input["end_time"],
+        )
 
     if tool_name == "compare_route":
         from app.route_scorer import score_routes
@@ -251,59 +206,13 @@ async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, 
             end_lon=tool_input["end_lon"],
         )
 
-    if tool_name == "predict_safe_duration":
-        return predict_safe_duration(
-            current_temp=tool_input["current_temp"],
-            humidity=tool_input.get("humidity", 50.0),
-            exceedance_duration=tool_input.get("exceedance_duration", 0.0),
-            hour_of_day=tool_input.get("hour_of_day", 12),
-            location_type=tool_input.get("location_type", "open_street"),
-        )
-
     if tool_name == "predict_risk":
-        import joblib
-        from pathlib import Path
-        import pandas as pd
-        model_path = Path("models/risk_model.joblib")
-        if not model_path.exists():
-            return {"error": "Risk model not trained yet. Run train_risk_model.py first."}
-        
-        bundle = joblib.load(model_path)
-        clf = bundle["model"]
-        feature_cols = bundle["feature_cols"]
-        explainer = bundle.get("explainer")
-        
-        row = {col: tool_input.get(col, 0) for col in feature_cols}
-        df = pd.DataFrame([row])
-        
-        pred = clf.predict(df)[0]
-        probas = clf.predict_proba(df)[0]
-        confidence = max(probas)
-        
-        # Calculate SHAP values
-        top_factors = []
-        if explainer:
-            shap_values = explainer.shap_values(df)
-            if isinstance(shap_values, list):
-                class_idx = list(clf.classes_).index(pred)
-                shap_vals = shap_values[class_idx][0]
-            else:
-                shap_vals = shap_values[0]
-            
-            factors = [{"feature": col, "contribution": float(val)} for col, val in zip(feature_cols, shap_vals)]
-            factors.sort(key=lambda x: abs(x["contribution"]), reverse=True)
-            top_factors = factors[:3]
-
-        from app.agent.thresholds import SAFE_MAX_C
-        hi = tool_input.get("heat_index_c", 0)
-        diff = hi - SAFE_MAX_C
-        compare_str = f"{diff:.1f}°C above safe exposure threshold" if diff > 0 else f"{abs(diff):.1f}°C below safe exposure threshold"
-        
-        return {
-            "risk_category": str(pred), 
-            "confidence": float(confidence),
-            "top_factors": top_factors,
-            "compares_to_threshold": compare_str
-        }
+        from app.agent.risk_predictor import predict_risk
+        return predict_risk(
+            heat_index_c=tool_input["heat_index_c"],
+            exceedance_hours=tool_input["exceedance_hours"],
+            hour_of_day=tool_input["hour_of_day"],
+            forecast_trend_rising=tool_input.get("forecast_trend_rising", 0),
+        )
 
     raise ValueError(f"Unknown tool: {tool_name}")

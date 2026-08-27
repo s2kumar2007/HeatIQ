@@ -1,129 +1,78 @@
 """
-PHASE 4 STUB — Train a lightweight risk classifier from FortyGuard
-features and bootstrapped labels (no ground truth available, so labels
-are derived from the same thresholds used elsewhere in the app —
-app.agent.thresholds.classify_point — for consistency).
+Train a lightweight RandomForest risk classifier.
 
-Once trained, wire the saved model into a new `predict_risk` tool in
-app/agent/tools.py (input: feature dict; output: {risk_category,
-confidence}) and add its schema to TOOLS, then update loop.py's
-SYSTEM_PROMPT to mention it as an additional signal the agent can use.
+Since FortyGuard is currently in placeholder mode (fixed values), we
+generate a synthetic but realistic training dataset spanning the full
+heat-index / exceedance-hours / hour-of-day space. Labels are derived
+from app.agent.thresholds.classify_point — the same function used
+everywhere else in the app — for consistency.
 
 Run:
     python scripts/train_risk_model.py
 """
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta
+import random
+import sys
+from pathlib import Path
+
+# Allow running as `python scripts/train_risk_model.py` from repo root
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import joblib
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
-import shap
-import matplotlib.pyplot as plt
-from sklearn.calibration import calibration_curve
-from sklearn.metrics import brier_score_loss
-
 from app.agent.thresholds import classify_point
-from app.agent.tools import _KNOWN_LOCATIONS  # small set of demo locations
-from app.fortyguard_client import fortyguard_client
 
-import os
-MODEL_OUT_PATH = "models/risk_model.joblib"
+MODEL_OUT = Path("app/agent/risk_model.joblib")
+FEATURE_COLS = ["hour_of_day", "heat_index_c", "exceedance_hours", "forecast_trend_rising"]
+RANDOM_SEED = 42
+N_SAMPLES = 2000
 
 
-async def collect_training_rows() -> pd.DataFrame:
+def build_dataset(n: int = N_SAMPLES) -> pd.DataFrame:
+    rng = random.Random(RANDOM_SEED)
     rows = []
-    now = datetime.utcnow()
-    for label, (lat, lon) in _KNOWN_LOCATIONS.items():
-        for hour_offset in range(0, 24, 3):  # sample every 3 hours across a day
-            ts = now + timedelta(hours=hour_offset)
-            snapshot = await fortyguard_client.get_current_heat(lat, lon)
-            exceedance = await fortyguard_client.get_exceedance(
-                lat, lon,
-                start_time=ts.isoformat(),
-                end_time=(ts + timedelta(hours=2)).isoformat(),
-            )
-            forecast = await fortyguard_client.get_forecast(
-                lat, lon,
-                start_time=ts.isoformat(),
-                end_time=(ts + timedelta(hours=6)).isoformat(),
-            )
-
-            heat_index = snapshot.get("heat_index_c", snapshot.get("temperature_c", 0.0))
-            exceedance_hours = exceedance.get("exceedance_duration_hours", 0.0)
-            trend_rising = 1 if forecast.get("trend") == "rising" else 0
-
-            label_band = classify_point(heat_index, exceedance_hours)
-
-            rows.append(
-                {
-                    "location": label,
-                    "hour_of_day": ts.hour,
-                    "heat_index_c": heat_index,
-                    "exceedance_hours": exceedance_hours,
-                    "forecast_trend_rising": trend_rising,
-                    "label": label_band,
-                }
-            )
+    for _ in range(n):
+        heat_index_c     = round(rng.uniform(28.0, 48.0), 2)
+        exceedance_hours = round(rng.uniform(0.0, 6.0),   2)
+        hour_of_day      = rng.randint(0, 23)
+        trend_rising     = rng.randint(0, 1)
+        label = classify_point(heat_index_c, exceedance_hours)
+        rows.append({
+            "hour_of_day": hour_of_day,
+            "heat_index_c": heat_index_c,
+            "exceedance_hours": exceedance_hours,
+            "forecast_trend_rising": trend_rising,
+            "label": label,
+        })
     return pd.DataFrame(rows)
 
 
 def train(df: pd.DataFrame):
-    feature_cols = ["hour_of_day", "heat_index_c", "exceedance_hours", "forecast_trend_rising"]
-    X = df[feature_cols]
+    X = df[FEATURE_COLS]
     y = df["label"]
 
+    stratify = y if y.nunique() > 1 else None
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.25, random_state=42, stratify=y if y.nunique() > 1 else None
+        X, y, test_size=0.2, random_state=RANDOM_SEED, stratify=stratify
     )
 
-    clf = RandomForestClassifier(n_estimators=200, random_state=42)
+    clf = RandomForestClassifier(n_estimators=200, random_state=RANDOM_SEED, n_jobs=-1)
     clf.fit(X_train, y_train)
 
-    acc = clf.score(X_test, y_test) if len(X_test) else float("nan")
-    print(f"Holdout accuracy: {acc:.3f} (n_test={len(X_test)})")
+    acc = clf.score(X_test, y_test)
+    print(f"Holdout accuracy: {acc:.4f}  (n_train={len(X_train)}, n_test={len(X_test)})")
+    print("Label distribution:\n", y.value_counts().to_string())
 
-    # SHAP explainer
-    explainer = shap.TreeExplainer(clf)
-
-    # Calibration for 'Unsafe' class (assuming it's a binary/multi classification)
-    try:
-        y_prob = clf.predict_proba(X_test)
-        unsafe_idx = list(clf.classes_).index("Unsafe")
-        y_test_bin = (y_test == "Unsafe").astype(int)
-        
-        prob_true, prob_pred = calibration_curve(y_test_bin, y_prob[:, unsafe_idx], n_bins=5)
-        brier = brier_score_loss(y_test_bin, y_prob[:, unsafe_idx])
-        print(f"Calibration Brier Score (Unsafe vs Rest): {brier:.4f}")
-
-        plt.figure(figsize=(6, 6))
-        plt.plot(prob_pred, prob_true, marker='o', label='RandomForest')
-        plt.plot([0, 1], [0, 1], linestyle='--', label='Perfectly calibrated')
-        plt.xlabel('Predicted probability (Unsafe)')
-        plt.ylabel('True probability in each bin (Unsafe)')
-        plt.legend()
-        plt.title('Calibration Curve')
-        plt.tight_layout()
-        plt.savefig("models/calibration_curve.png")
-        print("Saved calibration curve to models/calibration_curve.png")
-    except ValueError:
-        print("Skipping calibration curve (needs 'Unsafe' class in holdout).")
-
-    os.makedirs(os.path.dirname(MODEL_OUT_PATH), exist_ok=True)
-    joblib.dump({"model": clf, "feature_cols": feature_cols, "explainer": explainer}, MODEL_OUT_PATH)
-    print(f"Saved model and SHAP explainer to {MODEL_OUT_PATH}")
-
-
-async def main():
-    df = await collect_training_rows()
-    print(f"Collected {len(df)} training rows")
-    print(df["label"].value_counts())
-    train(df)
+    MODEL_OUT.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump({"model": clf, "feature_cols": FEATURE_COLS}, MODEL_OUT)
+    print(f"\nSaved -> {MODEL_OUT}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    print(f"Generating {N_SAMPLES} training samples…")
+    df = build_dataset()
+    train(df)
