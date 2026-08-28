@@ -1,0 +1,16 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+openai>=1.0.0
+httpx==0.27.2
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+tenacity==9.0.0
+
+# Phase 4 (optional, ML risk classifier)
+scikit-learn==1.5.2
+pandas==2.2.3
+joblib==1.4.2
+
+# Phase 3 (optional, alert scheduler)
+apscheduler==3.10.4
