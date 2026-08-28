@@ -46,23 +46,38 @@ def predict_risk(
     }
 
     import pandas as pd
-    X = pd.DataFrame([features])[feature_cols]
+    row = pd.DataFrame([features])
+    impute_cols = data.get("impute_cols", [])
+    for col in impute_cols:
+        row[f"{col}_was_imputed"] = row.get(col, pd.Series([None])).isna().astype(int)
+    row = row.reindex(columns=feature_cols)
+    if data.get("imputer") is not None:
+        row[impute_cols] = data["imputer"].transform(row[impute_cols])
+    X = row[feature_cols]
 
     proba = clf.predict_proba(X)[0]
     classes = list(clf.classes_)
     predicted = classes[int(proba.argmax())]
     confidence = float(proba.max())
 
-    # Feature importances as SHAP-like contributions (importance × feature value delta)
-    importances = clf.feature_importances_
+    # SHAP contributions explain this prediction, rather than global model importance.
+    import shap
+    explainer = data.get("explainer") or shap.TreeExplainer(clf)
+    shap_values = explainer.shap_values(X)
+    if isinstance(shap_values, list):
+        prediction_shap = shap_values[int(proba.argmax())][0]
+    elif getattr(shap_values, "ndim", 0) == 3:
+        prediction_shap = shap_values[0, :, int(proba.argmax())]
+    else:
+        prediction_shap = shap_values[0]
     top_factors = sorted(
         [
-            {"feature": col, "contribution": float(importances[i])}
+            {"feature": col, "contribution": float(prediction_shap[i])}
             for i, col in enumerate(feature_cols)
         ],
         key=lambda x: abs(x["contribution"]),
         reverse=True,
-    )
+    )[:3]
 
     from app.agent.thresholds import SAFE_MAX_C, CAUTION_MAX_C
     if predicted == "Unsafe":

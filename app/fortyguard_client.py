@@ -9,7 +9,7 @@ an area/heatmap API. Future iterations can natively support polygons.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import httpx
@@ -68,22 +68,28 @@ class FortyGuardClient:
             raise FortyGuardAPIError(f"FortyGuard API request failed on {path}: {e}") from e
 
     async def _poll_job(self, activity_id: str, status_path_tmpl: str = "/v1/status/{activity_id}") -> dict[str, Any]:
-        """Generic submit-and-poll helper for FortyGuard endpoints."""
+        """Poll until FortyGuard job completes. Returns the inner `result` dict."""
         elapsed = 0.0
         while elapsed < settings.poll_timeout_seconds:
             resp = await self._get(status_path_tmpl.format(activity_id=activity_id))
-            data = resp.get("data", {})
+            data = resp.get("data", resp)  # Some endpoints wrap in "data", some don't
             status = data.get("status", "").lower()
             if status in ("completed", "succeeded"):
-                return data
+                # Unwrap "result" so callers get stats_data / parameters directly
+                return data.get("result", data)
             if status in ("failed", "error"):
                 raise FortyGuardAPIError(f"FortyGuard job {activity_id} failed: {data.get('error')}")
             await asyncio.sleep(settings.poll_interval_seconds)
             elapsed += settings.poll_interval_seconds
         raise FortyGuardAPIError(f"FortyGuard job {activity_id} timed out after {elapsed}s")
 
-    def _make_polygon(self, lat: float, lon: float, offset: float = 0.0005) -> dict:
-        """Approximates a point as a ~100m polygon for Heatmap API"""
+    def _make_polygon(self, lat: float, lon: float, offset: float = 0.05) -> dict:
+        """
+        Build a bounding-box polygon around a point.
+        offset=0.05 degrees ≈ 5.5km square — large enough for FortyGuard's
+        heatmap grid to return at least one cell (n_cells > 0).
+        The previous 0.0005 (~55m) was below the minimum cell resolution.
+        """
         return {
             "type": "FeatureCollection",
             "features": [
@@ -104,6 +110,13 @@ class FortyGuardClient:
             ]
         }
 
+    async def _submit_and_poll(self, path: str, payload: dict) -> dict[str, Any]:
+        data = await self._post(path, payload)
+        activity_id = data.get("data", {}).get("activity_id")
+        if not activity_id:
+            raise FortyGuardAPIError(f"No activity_id returned in {path} POST response")
+        return await self._poll_job(activity_id)
+
     async def _submit_and_poll_heatmap(self, polygon_aoi: dict, date_time: dict, granularity: int, analytic_type: str, threshold: float = None, direction: str = None) -> dict[str, Any]:
         payload = {
             "polygon_aoi": polygon_aoi,
@@ -116,29 +129,55 @@ class FortyGuardClient:
         if direction is not None:
             payload["direction"] = direction
             
-        data = await self._post("/v1/heatmap", payload)
-        activity_id = data.get("data", {}).get("activity_id")
-        if not activity_id:
-            raise FortyGuardAPIError("No activity_id returned in heatmap POST response")
-        return await self._poll_job(activity_id)
+        return await self._submit_and_poll("/v1/heatmap", payload)
 
     async def get_current_heat(self, lat: float, lon: float) -> dict[str, Any]:
         """Current snapshot temperature using filter_type=1 (tcm)."""
         polygon = self._make_polygon(lat, lon)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         date_time = {
             "start_date": now.strftime("%Y-%m-%d"),
             "start_time": now.strftime("%H:%M"),
             "filter_type": 1
         }
         data = await self._submit_and_poll_heatmap(polygon, date_time, 60, "tcm")
-        stats = data.get("stats_data", {}).get("Temperature_stats", {})
-        mean_temp = stats.get("Mean", 0.0)
+        # API returns lowercase keys: stats_data.temperature_stats.mean
+        stats = data.get("stats_data", {}).get("temperature_stats", {})
+        mean_temp = stats.get("mean")
+        if mean_temp is None:
+            raise FortyGuardAPIError("Heatmap returned no temperature data (n_cells=0 or no coverage for this region)")
         return {
             "temperature_c": mean_temp,
             "heat_index_c": mean_temp,
-            "maximum_c": stats.get("Maximum", mean_temp)
+            "maximum_c": stats.get("maximum", mean_temp)
         }
+
+    async def get_environmental_params(self, lat: float, lon: float, date_str: str, time_str: str, temperature: float) -> dict[str, Any]:
+        """Fetch environmental parameters for a given location, date, and time."""
+        date_time = {
+            "start_date": date_str,
+            "start_time": time_str,
+            "filter_type": 1
+        }
+        payload = {
+            "latitude": lat,
+            "longitude": lon,
+            "temperature": temperature,
+            "date_time": date_time,
+            "analysis": [
+                "heat_index_celsius", 
+                "apparent_temperature_celsius", 
+                "wet_bulb_temperature_celsius", 
+                "relative_humidity_percent",
+                "air_quality:idx"
+            ]
+        }
+        
+        try:
+            return await self._submit_and_poll("/v1/env_params", payload)
+        except Exception as e:
+            # Re-raise to ensure failures are noticeable in script
+            raise FortyGuardAPIError(f"Failed to fetch env_params: {e}")
 
     async def get_exceedance(
         self,
@@ -151,11 +190,10 @@ class FortyGuardClient:
         """How long a location exceeds a heat threshold in a window (exceedance)."""
         polygon = self._make_polygon(lat, lon)
         try:
-            # We want just the HH:MM properly stripped for the API
             st = datetime.fromisoformat(start_time.replace("Z", "+00:00").replace("T", " "))
             et = datetime.fromisoformat(end_time.replace("Z", "+00:00").replace("T", " "))
         except ValueError:
-            st = datetime.utcnow()
+            st = datetime.now(timezone.utc)
             et = st
             
         date_time = {
@@ -165,9 +203,10 @@ class FortyGuardClient:
             "filter_type": 2
         }
         data = await self._submit_and_poll_heatmap(polygon, date_time, 60, "exceedance", threshold=threshold_c, direction="above")
-        stats = data.get("stats_data", {}).get("Temperature_stats", {})
+        # API returns lowercase keys
+        stats = data.get("stats_data", {}).get("temperature_stats", {})
         return {
-            "exceedance_duration_hours": stats.get("Mean", 0.0)
+            "exceedance_duration_hours": stats.get("mean", 0.0)
         }
 
     async def get_forecast(
@@ -186,7 +225,7 @@ class FortyGuardClient:
             st = datetime.fromisoformat(start_time.replace("Z", "+00:00").replace("T", " "))
             et = datetime.fromisoformat(end_time.replace("Z", "+00:00").replace("T", " "))
         except ValueError:
-            st = datetime.utcnow()
+            st = datetime.now(timezone.utc)
             et = st
             
         date_time = {
@@ -196,10 +235,11 @@ class FortyGuardClient:
             "filter_type": 2
         }
         data = await self._submit_and_poll_heatmap(polygon, date_time, 60, "tcm")
-        stats = data.get("stats_data", {}).get("Temperature_stats", {})
+        # API returns lowercase keys
+        stats = data.get("stats_data", {}).get("temperature_stats", {})
         return {
             "trend": "rising",
-            "peak_temperature_c": stats.get("Maximum", 0.0)
+            "peak_temperature_c": stats.get("maximum", 0.0)
         }
 
 fortyguard_client = FortyGuardClient()
