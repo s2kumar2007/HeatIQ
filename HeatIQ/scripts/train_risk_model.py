@@ -114,10 +114,6 @@ async def fetch_data_for_point(lat: float, lon: float, date_str: str, time_str: 
         }
 
         # Keep the complete endpoint responses so reruns do not spend credits.
-
-        if result["heat_index_c"] is None or exc_hours is None:
-            logging.warning("Skipping sample with missing label inputs at %s %s", date_str, time_str)
-            return None
         with cache_path.open("w") as cache_file:
             json.dump({
                 "sample": result,
@@ -128,6 +124,10 @@ async def fetch_data_for_point(lat: float, lon: float, date_str: str, time_str: 
                     "forecast": forecast,
                 },
             }, cache_file)
+
+        if result["heat_index_c"] is None or exc_hours is None:
+            logging.warning("Skipping sample with missing label inputs at %s %s", date_str, time_str)
+            return None
 
         return result
     except Exception as e:
