@@ -136,9 +136,6 @@ TOOLS: list[dict[str, Any]] = [
                     "exceedance_hours": {"type": "number", "description": "Hours exceeding safe threshold"},
                     "hour_of_day": {"type": "integer", "description": "Current hour (0-23)"},
                     "forecast_trend_rising": {"type": "integer", "description": "1 if rising trend, 0 otherwise"},
-                    "wet_bulb_temperature_celsius": {"type": "number", "description": "Wet-bulb temperature"},
-                    "relative_humidity_percent": {"type": "number", "description": "Relative humidity"},
-                    "air_quality_idx": {"type": "number", "description": "Air Quality Index (AQI)"},
                 },
                 "required": ["heat_index_c", "exceedance_hours", "hour_of_day"],
             },
@@ -216,9 +213,6 @@ async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, 
             exceedance_hours=tool_input["exceedance_hours"],
             hour_of_day=tool_input["hour_of_day"],
             forecast_trend_rising=tool_input.get("forecast_trend_rising", 0),
-            wet_bulb_temperature_celsius=tool_input.get("wet_bulb_temperature_celsius"),
-            relative_humidity_percent=tool_input.get("relative_humidity_percent"),
-            air_quality_idx=tool_input.get("air_quality_idx")
         )
 
     raise ValueError(f"Unknown tool: {tool_name}")

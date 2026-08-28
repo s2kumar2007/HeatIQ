@@ -133,13 +133,6 @@ curl -X POST http://localhost:8000/ask \
   -d '{"question": "Is it safe to hold an outdoor event in Anna Nagar tomorrow afternoon?"}'
 ```
 
-###2. **Train Risk Model**  
-   We use a random forest classifier to predict risk. The model takes in heat index, wet-bulb temperature, relative humidity, air quality index, exceedance hours, and other features.
-   ```bash
-   python scripts/train_risk_model.py
-   ```
-   *Note: Risk predictions now incorporate humidity, wet-bulb temperature, and air-quality signals, not just raw temperature.*
-
 ### Run the sample question suite
 
 ```bash
