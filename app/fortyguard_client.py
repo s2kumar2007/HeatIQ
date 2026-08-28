@@ -132,27 +132,27 @@ class FortyGuardClient:
         return await self._submit_and_poll("/v1/heatmap", payload)
 
     async def get_current_heat(self, lat: float, lon: float) -> dict[str, Any]:
-        """Current snapshot temperature using filter_type=1 (tcm)."""
-        polygon = self._make_polygon(lat, lon)
+        """Current snapshot temperature and params using get_environmental_params."""
         now = datetime.now(timezone.utc)
-        date_time = {
-            "start_date": now.strftime("%Y-%m-%d"),
-            "start_time": now.strftime("%H:%M"),
-            "filter_type": 1
-        }
-        data = await self._submit_and_poll_heatmap(polygon, date_time, 60, "tcm")
-        # API returns lowercase keys: stats_data.temperature_stats.mean
-        stats = data.get("stats_data", {}).get("temperature_stats", {})
-        mean_temp = stats.get("mean")
-        if mean_temp is None:
-            raise FortyGuardAPIError("Heatmap returned no temperature data (n_cells=0 or no coverage for this region)")
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H:%M")
+        
+        env_data = await self.get_environmental_params(lat, lon, date_str, time_str)
+        params = env_data.get("data", {}).get("parameters", env_data.get("parameters", {}))
+        
+        temp = params.get("temperature_celsius")
+        if temp is None:
+            raise FortyGuardAPIError("Environmental params returned no temperature data")
+            
         return {
-            "temperature_c": mean_temp,
-            "heat_index_c": mean_temp,
-            "maximum_c": stats.get("maximum", mean_temp)
+            "temperature_c": temp,
+            "heat_index_c": params.get("heat_index_celsius", temp),
+            "humidity": params.get("relative_humidity_percent"),
+            "wet_bulb_c": params.get("wet_bulb_temperature_celsius"),
+            "maximum_c": temp  # point-based doesn't have min/max/mean like heatmap
         }
 
-    async def get_environmental_params(self, lat: float, lon: float, date_str: str, time_str: str, temperature: float) -> dict[str, Any]:
+    async def get_environmental_params(self, lat: float, lon: float, date_str: str, time_str: str, temperature: Optional[float] = None) -> dict[str, Any]:
         """Fetch environmental parameters for a given location, date, and time."""
         date_time = {
             "start_date": date_str,
@@ -162,9 +162,9 @@ class FortyGuardClient:
         payload = {
             "latitude": lat,
             "longitude": lon,
-            "temperature": temperature,
             "date_time": date_time,
             "analysis": [
+                "temperature_celsius",
                 "heat_index_celsius", 
                 "apparent_temperature_celsius", 
                 "wet_bulb_temperature_celsius", 
@@ -172,6 +172,8 @@ class FortyGuardClient:
                 "air_quality:idx"
             ]
         }
+        if temperature is not None:
+            payload["temperature"] = temperature
         
         try:
             return await self._submit_and_poll("/v1/env_params", payload)
