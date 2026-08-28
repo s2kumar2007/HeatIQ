@@ -1,17 +1,5 @@
 [
     {
-        "name": "Dubai Marina",
-        "lat": 25.0805,
-        "lon": 55.1403,
-        "type": "open_street"
-    },
-    {
-        "name": "Umm Al Emarat Park, AD",
-        "lat": 24.4552,
-        "lon": 54.3813,
-        "type": "park"
-    },
-    {
         "name": "Phoenix Downtown Transit",
         "lat": 33.4484,
         "lon": -112.0740,
@@ -22,24 +10,6 @@
         "lat": 25.7906,
         "lon": -80.1300,
         "type": "residential"
-    },
-    {
-        "name": "Riyadh King Fahd Rd",
-        "lat": 24.7136,
-        "lon": 46.6753,
-        "type": "open_street"
-    },
-    {
-        "name": "Sydney Centennial Park",
-        "lat": -33.8966,
-        "lon": 151.2335,
-        "type": "park"
-    },
-    {
-        "name": "New Delhi Connaught Place",
-        "lat": 28.6304,
-        "lon": 77.2177,
-        "type": "open_street"
     },
     {
         "name": "Las Vegas Strip",
@@ -54,15 +24,51 @@
         "type": "park"
     },
     {
-        "name": "Madrid Central Bus Station",
-        "lat": 40.3951,
-        "lon": -3.6763,
-        "type": "bus_stop"
+        "name": "Houston Hermann Park",
+        "lat": 29.7174,
+        "lon": -95.3906,
+        "type": "park"
     },
     {
-        "name": "Bangkok Sukhumvit",
-        "lat": 13.7381,
-        "lon": 100.5658,
+        "name": "Dallas Deep Ellum",
+        "lat": 32.7840,
+        "lon": -96.7840,
+        "type": "open_street"
+    },
+    {
+        "name": "Los Angeles Griffith Park",
+        "lat": 34.1341,
+        "lon": -118.3215,
+        "type": "park"
+    },
+    {
+        "name": "New York Central Park",
+        "lat": 40.7829,
+        "lon": -73.9654,
+        "type": "park"
+    },
+    {
+        "name": "Chicago Millennium Park",
+        "lat": 41.8827,
+        "lon": -87.6233,
+        "type": "open_street"
+    },
+    {
+        "name": "Atlanta Centennial Olympic Park",
+        "lat": 33.7600,
+        "lon": -84.3927,
+        "type": "open_street"
+    },
+    {
+        "name": "Tucson University of Arizona",
+        "lat": 32.2319,
+        "lon": -110.9501,
         "type": "residential"
+    },
+    {
+        "name": "Sacramento Capitol Mall",
+        "lat": 38.5767,
+        "lon": -121.4936,
+        "type": "open_street"
     }
 ]
