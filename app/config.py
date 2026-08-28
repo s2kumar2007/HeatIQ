@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     grok_model: str = "grok-beta"
 
     # FortyGuard
-    fortyguard_base_url: str = "https://api.fortyguard.example.com"
+    fortyguard_base_url: str = "https://api.fortyguard.com"
     fortyguard_api_key: str = ""
 
     # Thresholds (documented in agent/thresholds.py; overridable via env)
