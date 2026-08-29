@@ -168,20 +168,41 @@ def resolve_location(label: str) -> tuple[float, float] | None:
 # Dispatcher
 # ----------------------------------------------------------------------
 
-async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+async def execute_tool(
+    tool_name: str,
+    tool_input: dict[str, Any],
+    fortyguard_api_key: Optional[str] = None,
+) -> dict[str, Any]:
     """Execute a single tool call and return a JSON-serializable result.
+
+    Args:
+        tool_name: Name of the tool to execute.
+        tool_input: Arguments for the tool.
+        fortyguard_api_key: Optional per-request FortyGuard API key override.
+            When provided, a temporary client is created with that key instead
+            of using the module-level singleton. This enables key injection from
+            the frontend without mutating global state.
 
     Raises are caught by the caller (agent loop) so a tool failure can be
     reported back to the LLM as a tool_result error rather than crashing
     the whole request.
     """
+    from app.fortyguard_client import FortyGuardClient
+
+    # Use per-request client if a key override was supplied; else use singleton
+    fg = (
+        FortyGuardClient(api_key=fortyguard_api_key)
+        if fortyguard_api_key
+        else fortyguard_client
+    )
+
     if tool_name == "get_current_heat":
-        return await fortyguard_client.get_current_heat(
+        return await fg.get_current_heat(
             lat=tool_input["lat"], lon=tool_input["lon"]
         )
 
     if tool_name == "get_exceedance":
-        return await fortyguard_client.get_exceedance(
+        return await fg.get_exceedance(
             lat=tool_input["lat"],
             lon=tool_input["lon"],
             start_time=tool_input["start_time"],
@@ -190,7 +211,7 @@ async def execute_tool(tool_name: str, tool_input: dict[str, Any]) -> dict[str, 
         )
 
     if tool_name == "get_forecast":
-        return await fortyguard_client.get_forecast(
+        return await fg.get_forecast(
             lat=tool_input["lat"],
             lon=tool_input["lon"],
             start_time=tool_input["start_time"],

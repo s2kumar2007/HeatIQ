@@ -1,10 +1,10 @@
 """
-Agent loop using Grok API (OpenAI-compatible client via xAI).
+Agent loop using Groq API (OpenAI-compatible client via Groq).
 """
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Optional
 
 from openai import AsyncOpenAI
 
@@ -47,9 +47,25 @@ class AgentLoopError(Exception):
     pass
 
 
-async def run_agent(question: str) -> AskResponse:
+async def run_agent(
+    question: str,
+    groq_api_key: Optional[str] = None,
+    fortyguard_api_key: Optional[str] = None,
+) -> AskResponse:
+    """Run the heat decision agent for a given question.
+
+    Args:
+        question: The heat-safety question to answer.
+        groq_api_key: Optional per-request Groq API key override (takes precedence
+            over the .env / settings value). Allows the frontend to supply a user-
+            configured key without restarting the server.
+        fortyguard_api_key: Optional per-request FortyGuard API key override.
+    """
+    # Resolve which Groq key to use (per-request override takes priority)
+    effective_groq_key = groq_api_key or settings.groq_api_key
+
     client = AsyncOpenAI(
-        api_key=settings.grok_api_key,
+        api_key=effective_groq_key,
         base_url="https://api.groq.com/openai/v1",
     )
 
@@ -73,12 +89,19 @@ async def run_agent(question: str) -> AskResponse:
     final_text = ""
 
     for _turn in range(MAX_AGENT_TURNS):
-        response = await client.chat.completions.create(
-            model=settings.grok_model,
-            max_tokens=1500,
-            tools=TOOLS,
-            messages=messages,
-        )
+        try:
+            response = await client.chat.completions.create(
+                model=settings.groq_model,
+                max_tokens=1500,
+                tools=TOOLS,
+                messages=messages,
+            )
+        except Exception as e:
+            import logging
+            logging.error(f"Groq API call failed: {e}")
+            if hasattr(e, 'response'):
+                logging.error(f"Response body: {e.response.text}")
+            raise e
 
         msg = response.choices[0].message
         finish_reason = response.choices[0].finish_reason
@@ -91,8 +114,11 @@ async def run_agent(question: str) -> AskResponse:
         if finish_reason != "tool_calls" or not msg.tool_calls:
             break
 
-        # Append assistant message to history
-        messages.append(msg)
+        # Append assistant message to history safely for Groq
+        assistant_dict = msg.model_dump(exclude_unset=True)
+        if assistant_dict.get("content") is None:
+            assistant_dict["content"] = ""
+        messages.append(assistant_dict)
 
         # Execute each tool call
         tool_results: list[dict[str, Any]] = []
@@ -111,7 +137,10 @@ async def run_agent(question: str) -> AskResponse:
                     tool_input["lat"], tool_input["lon"] = coords
 
             try:
-                result = await execute_tool(tool_name, tool_input)
+                result = await execute_tool(
+                    tool_name, tool_input,
+                    fortyguard_api_key=fortyguard_api_key,
+                )
                 error = None
             except NotImplementedError as e:
                 result = {"error": str(e), "implemented": False}
@@ -131,6 +160,7 @@ async def run_agent(question: str) -> AskResponse:
             tool_results.append({
                 "role": "tool",
                 "tool_call_id": tc.id,
+                "name": tc.function.name,
                 "content": json.dumps(result, default=str),
             })
 

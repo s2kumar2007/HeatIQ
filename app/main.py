@@ -1,12 +1,14 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.agent.loop import run_agent
 from app.alerts_scheduler import get_status, run_forever
+from app.config import settings
 from app.models import AskRequest, AskResponse
 
 logging.basicConfig(level=logging.INFO)
@@ -32,15 +34,37 @@ async def startup():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "groq_configured": bool(settings.groq_api_key),
+        "fortyguard_configured": bool(settings.fortyguard_api_key),
+    }
 
 
 @app.post("/ask", response_model=AskResponse)
-async def ask(req: AskRequest) -> AskResponse:
+async def ask(req: AskRequest, request: Request) -> AskResponse:
+    """Answer a heat-safety question using the autonomous agent.
+
+    API key overrides can be supplied via request headers:
+      X-Groq-Api-Key       — overrides GROQ_API_KEY from .env
+      X-FortyGuard-Api-Key — overrides FORTYGUARD_API_KEY from .env
+
+    This allows the frontend to inject user-configured keys without
+    requiring a server restart or .env edit.
+    """
     if not req.question or not req.question.strip():
         raise HTTPException(status_code=400, detail="question must not be empty")
+
+    # Extract optional per-request API key overrides from headers
+    groq_key_override: Optional[str] = request.headers.get("X-Groq-Api-Key") or None
+    fg_key_override: Optional[str] = request.headers.get("X-FortyGuard-Api-Key") or None
+
     try:
-        return await run_agent(req.question)
+        return await run_agent(
+            req.question,
+            groq_api_key=groq_key_override,
+            fortyguard_api_key=fg_key_override,
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Agent failed: {e}") from e
 

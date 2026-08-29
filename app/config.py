@@ -1,15 +1,17 @@
 """Central config, loaded from environment / .env."""
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Grok
-    grok_api_key: str = ""
-    grok_model: str = "grok-beta"
+    # Groq LLM (https://console.groq.com)
+    groq_api_key: Optional[str] = None
+    groq_model: str = "openai/gpt-oss-20b"
 
-    # FortyGuard
+    # FortyGuard Temperature API (https://fortyguard.com/dashboard)
     fortyguard_base_url: str = "https://api.fortyguard.com"
     fortyguard_api_key: str = ""
 
