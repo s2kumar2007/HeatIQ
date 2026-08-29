@@ -17,3 +17,5 @@ exposure_model.pkl
 # Debug scratch files
 debug.txt
 
+
+venv/
