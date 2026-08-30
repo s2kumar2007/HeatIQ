@@ -109,28 +109,52 @@ numbers before using in production):
 The agent is instructed to cite which band + which data point drove its
 decision, not just assert a verdict.
 
-## Setup
+## Running Locally (Two-Service Architecture)
 
-```bash
-cd heat-decision-agent
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# fill in ANTHROPIC_API_KEY and FORTYGUARD_API_KEY / FORTYGUARD_BASE_URL in .env
-```
+This project consists of a Python FastAPI backend and a Node.js/Vite frontend. They must run together.
 
-### Run the API
+1. **Install dependencies**
+   ```bash
+   # Backend
+   python -m venv .venv
+   source .venv/bin/activate  # Or .\.venv\Scripts\activate on Windows
+   pip install -r requirements.txt
+   cp .env.example .env # Add your ANTHROPIC_API_KEY and FORTYGUARD_API_KEY
 
-```bash
-uvicorn app.main:app --reload --port 8000
-```
+   # Frontend
+   cd frontend
+   npm install
+   cp .env.example .env
+   cd ..
+   ```
 
-### Ask it something
+2. **Start both services**
+   You can start both services simultaneously using the provided scripts:
+   - Linux/macOS: `./start.sh`
+   - Windows (PowerShell): `.\start.ps1`
+   
+   Alternatively, run them manually in separate terminals:
+   - Backend (Port 8000): `uvicorn app.main:app --host 127.0.0.1 --port 8000`
+   - Frontend (Port 3000): `npm run dev --prefix frontend`
+
+3. **Open the UI**
+   Visit [http://localhost:3000](http://localhost:3000) in your browser.
+   *Note: `HEATIQ_BACKEND_URL` in `frontend/.env` must match the FastAPI backend URL (default `http://127.0.0.1:8000`). If the backend is down, the frontend will show a 503 error.*
+
+## Deployment Note
+
+For actual deployment, this is a **two-service architecture**:
+1. The **FastAPI backend** must be deployed to a service like Cloud Run, Render, or Heroku, exposing a public URL.
+2. The **Node/Vite frontend** must be deployed with `HEATIQ_BACKEND_URL` configured to point to the deployed backend's public URL, *not* 127.0.0.1.
+
+Ensure you test locally before deployment. A misconfigured `HEATIQ_BACKEND_URL` will cause all agent interactions to fail loudly in the UI.
+
+### Ask the API directly
 
 ```bash
 curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Is it safe to hold an outdoor event in Anna Nagar tomorrow afternoon?"}'
+  -d '{"question": "Is it safe to hold an outdoor event in Phoenix tomorrow afternoon?"}'
 ```
 
 ### Run the sample question suite
@@ -142,11 +166,6 @@ python scripts/test_agent.py
 ### Background Monitoring
 
 **Alert monitoring runs automatically on server startup.** It periodically checks the heat conditions for locations listed in `app/tracked_locations.json` in the background and issues console and/or webhook alerts when conditions become unsafe.
-
-### Frontend
-
-Open `frontend/index.html` directly in a browser (it calls
-`http://localhost:8000/ask`), or serve it with any static file server.
 
 ## Data Collection
 

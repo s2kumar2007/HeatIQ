@@ -17,3 +17,7 @@ exposure_model.pkl
 # Debug scratch files
 debug.txt
 
+# Frontend build artifacts and secrets — never commit these
+frontend/node_modules/
+frontend/dist/
+frontend/.env

@@ -1,0 +1,5 @@
+{
+  "name": "HeatIQ",
+  "description": "Tactical thermal intelligence, urban heat island mapping, spatial environmental analytics, and coolest-path route planning command center.",
+  "requestFramePermissions": ["geolocation"]
+}
