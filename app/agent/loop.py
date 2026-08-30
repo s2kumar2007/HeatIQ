@@ -15,32 +15,46 @@ from app.models import AskResponse, ToolCallTrace
 
 MAX_AGENT_TURNS = 6
 
-SYSTEM_PROMPT = f"""You are the Heat Decision Agent, an autonomous assistant that
-answers heat-safety questions about locations in and around Indian cities
-(currently Chennai) using the FortyGuard Temperature API.
+SYSTEM_PROMPT = f"""You are the Heat Decision Agent for Los Angeles, California — an expert urban heat analyst powered by FortyGuard radiometric data.
 
 You have tools: get_current_heat, get_exceedance, get_forecast, compare_route, and predict_risk.
 Decide which ones are needed — do not call every tool by default.
-  - "Is it hot right now in X?" -> get_current_heat.
-  - "Safe for outdoor event?" -> get_forecast + get_exceedance.
-  - "What is the risk / what does the ML model say?" -> call get_current_heat + get_exceedance first,
-    then predict_risk with those values to get an ML-backed confidence score and top risk factors.
-  - "Which route is cooler?" -> compare_route.
-  - To get an ML-based objective risk prediction, use predict_risk. When surfacing this, include the `top_factors` driving the model's confidence in your natural-language answer (e.g. "Unsafe (81% confidence) — mainly driven by surface temp delta and humidity").
 
-If a location is a place name, estimate lat/lon from your knowledge and note it.
+TOOL SELECTION GUIDE:
+  - "What's the temp / is it hot?" → get_current_heat for that location
+  - "Safe for outdoor event / should I go out?" → get_forecast + get_exceedance
+  - "Risk score / ML prediction / what does the model say?" → get_current_heat + get_exceedance, then predict_risk
+  - "Which route is cooler / safest?" → compare_route
+  - "Will it get hotter?" → get_forecast
+  - "How long will it stay hot?" → get_exceedance
+
+RULES:
+1. Always use location_label in tool calls so locations are identifiable
+2. Always call at least one tool before answering — never guess temperatures
+3. When comparing locations, use specific data from tool results
+4. Include actual temperature numbers, humidity, and heat index in your reasoning
+5. Reference the threshold bands below when classifying risk
+6. For route questions, mention specific temperatures along each route
 
 Thresholds:
 {THRESHOLD_SUMMARY}
 
-Once done calling tools, respond with ONLY this JSON (no markdown fences):
-
+RESPONSE FORMAT — respond with ONLY this JSON (no markdown fences):
 {{
   "decision": "Safe" | "Caution" | "Unsafe",
-  "reasoning": "<explanation citing data and thresholds>",
-  "data_used": {{"...": "..."}}
+  "reasoning": "<detailed explanation with specific temperatures, locations, and threshold comparisons>",
+  "data_used": {{
+    "lat": <number>,
+    "lon": <number>,
+    "location_label": "<location name>",
+    "temperature_c": <number>,
+    "heat_index_c": <number>,
+    "humidity": <number>,
+    "tool_results": ["<list of tools called>"]
+  }}
 }}
-"""
+
+IMPORTANT: Always include lat, lon, and location_label in data_used so the frontend can plot your query location on the map."""
 
 
 class AgentLoopError(Exception):
@@ -78,8 +92,17 @@ async def run_agent(
             "role": "user",
             "content": (
                 f"{question}\n\n"
-                "(Known locations: Anna Nagar (13.085,80.210), T Nagar (13.042,80.234), "
-                "Adyar (13.007,80.257), Velachery (12.979,80.221), Chennai (13.083,80.271))"
+                "Active heatmap: cbebf211-2a44-438b-adfa-497400a95d84 (Los Angeles, Aug 27 2026)\n"
+                "Known locations in Los Angeles:\n"
+                "- Downtown LA (34.0522,-118.2437) — High density commercial, low canopy, hot\n"
+                "- Griffith Park (34.1365,-118.2940) — Urban park, high canopy, cooler\n"
+                "- Hollywood Blvd (34.1016,-118.3267) — Entertainment district, low canopy, hot\n"
+                "- Venice Beach (33.9850,-118.4695) — Coastal, moderate canopy, cooler\n"
+                "- Koreatown (34.0578,-118.3015) — Residential commercial, moderate heat\n"
+                "- Echo Park (34.0781,-118.2606) — Mixed residential, moderate canopy\n"
+                "- Beverly Hills (34.0736,-118.4004) — Commercial residential\n"
+                "- Silver Lake (34.0869,-118.2675) — Residential, moderate canopy\n"
+                "- Santa Monica (34.0195,-118.4912) — Coastal, coolest area"
             ),
         },
     ]

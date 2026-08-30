@@ -6,7 +6,7 @@ call sequence.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from app.fortyguard_client import FortyGuardAPIError, fortyguard_client
 
@@ -33,7 +33,7 @@ TOOLS: list[dict[str, Any]] = [
                     "lon": {"type": "number", "description": "Longitude"},
                     "location_label": {
                         "type": "string",
-                        "description": "Human-readable name of the location, e.g. 'Anna Nagar'",
+                        "description": "Human-readable name of the location, e.g. 'Downtown LA'",
                     },
                 },
                 "required": ["lat", "lon"],
@@ -152,11 +152,28 @@ TOOLS: list[dict[str, Any]] = [
 # available. Kept tiny and explicit so the agent's location resolution
 # is inspectable during the hackathon demo.
 _KNOWN_LOCATIONS: dict[str, tuple[float, float]] = {
-    "anna nagar": (13.0850, 80.2101),
-    "chennai": (13.0827, 80.2707),
-    "t nagar": (13.0418, 80.2341),
-    "adyar": (13.0067, 80.2570),
-    "velachery": (12.9791, 80.2212),
+    "los angeles": (34.0522, -118.2437),
+    "la": (34.0522, -118.2437),
+    "downtown la": (34.0522, -118.2437),
+    "downtown los angeles": (34.0522, -118.2437),
+    "griffith park": (34.1365, -118.2940),
+    "hollywood": (34.1016, -118.3267),
+    "hollywood blvd": (34.1016, -118.3267),
+    "venice": (33.9850, -118.4695),
+    "venice beach": (33.9850, -118.4695),
+    "koreatown": (34.0578, -118.3015),
+    "echo park": (34.0781, -118.2606),
+    "silver lake": (34.0869, -118.2675),
+    "los feliz": (34.1069, -118.2862),
+    "beverly hills": (34.0736, -118.4004),
+    "culver city": (34.0211, -118.3965),
+    "santa monica": (34.0195, -118.4912),
+    "pasadena": (34.1478, -118.1445),
+    "long beach": (33.7701, -118.1937),
+    "burbank": (34.1808, -118.3090),
+    "glendale": (34.1425, -118.2551),
+    "west hollywood": (34.0900, -118.3617),
+    "dtla": (34.0522, -118.2437),
 }
 
 

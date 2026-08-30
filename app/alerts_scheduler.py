@@ -55,8 +55,8 @@ async def _check_all():
                 label = loc.get("label", f"{loc['lat']},{loc['lon']}")
                 unsafe.append(label)
                 await _fire_alert(loc, snap, band)
-        except Exception:
-            logger.exception("Failed checking %s", loc)
+        except Exception as e:
+            logger.error("Failed checking %s: %s", loc.get("label", str(loc)), str(e))
     _state["unsafe_locations"] = unsafe
     _state["last_check"] = datetime.now(timezone.utc).isoformat()
 

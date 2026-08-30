@@ -1,6 +1,8 @@
 [
-  {"label": "Anna Nagar", "lat": 13.0850, "lon": 80.2101},
-  {"label": "T Nagar", "lat": 13.0418, "lon": 80.2341},
-  {"label": "Adyar", "lat": 13.0067, "lon": 80.2570},
-  {"label": "Velachery", "lat": 12.9791, "lon": 80.2212}
+  {"label": "Downtown LA", "lat": 34.0522, "lon": -118.2437},
+  {"label": "Griffith Park", "lat": 34.1365, "lon": -118.2940},
+  {"label": "Hollywood Blvd", "lat": 34.1016, "lon": -118.3267},
+  {"label": "Venice Beach", "lat": 33.9850, "lon": -118.4695},
+  {"label": "Koreatown", "lat": 34.0578, "lon": -118.3015},
+  {"label": "Echo Park", "lat": 34.0781, "lon": -118.2606}
 ]

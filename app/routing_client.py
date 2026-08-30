@@ -3,9 +3,11 @@ from typing import Any
 
 async def get_candidate_routes(start_lat: float, start_lon: float, end_lat: float, end_lon: float) -> list[dict[str, Any]]:
     """Fetch candidate routes from OSRM and return them with sampled coordinates."""
-    url = f"http://router.project-osrm.org/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?alternatives=true&geometries=geojson&overview=full"
+    # HTTPS avoids mixed-content/network-policy failures when the API is used
+    # through the browser-facing development stack.
+    url = f"https://router.project-osrm.org/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?alternatives=true&geometries=geojson&overview=full"
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(url)
         response.raise_for_status()
         data = response.json()
@@ -19,8 +21,8 @@ async def get_candidate_routes(start_lat: float, start_lon: float, end_lat: floa
             # Sample up to 5 points along the route
             sampled = []
             if len(coords) > 0:
-                step = max(1, len(coords) // 5)
-                sampled_coords = coords[::step][:5]
+                step = max(1, len(coords) // 3)
+                sampled_coords = coords[::step][:3]
                 
                 sampled = [{"lat": c[1], "lon": c[0]} for c in sampled_coords]
                 
@@ -28,7 +30,8 @@ async def get_candidate_routes(start_lat: float, start_lon: float, end_lat: floa
                 "route_id": idx + 1,
                 "distance_m": route.get("distance", 0),
                 "duration_s": route.get("duration", 0),
-                "sampled_points": sampled
+                "sampled_points": sampled,
+                "geometry": route.get("geometry", {}),
             })
             
     return routes
