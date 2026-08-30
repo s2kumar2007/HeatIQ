@@ -40,7 +40,7 @@ def _la_simulated_heat(lat: float, lon: float) -> dict[str, Any]:
         base_temp = 22.0
 
     # Location-based offset (coastal = cooler, inland = hotter)
-    h = float(hashlib.md5(f"{lat:.4f},{lon:.4f}".encode()).hexdigest()[:8], 16)
+    h = float(int(hashlib.md5(f"{lat:.4f},{lon:.4f}".encode()).hexdigest()[:8], 16))
     location_offset = (h % 800) / 100.0 - 4.0  # -4 to +4 degrees
 
     temp = round(base_temp + location_offset, 1)

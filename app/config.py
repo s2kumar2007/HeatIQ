@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     # Groq LLM (https://console.groq.com)
     groq_api_key: Optional[str] = None
-    groq_model: str = "openai/gpt-oss-20b"
+    groq_model: str = "llama-3.3-70b-versatile"
 
     # FortyGuard Temperature API (https://fortyguard.com/dashboard)
     fortyguard_base_url: str = "https://api.fortyguard.com"
